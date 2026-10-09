@@ -1,14 +1,17 @@
 package com.example.asic
 
 import android.app.*
+import android.content.ContentUris
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.audiofx.Visualizer
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.provider.MediaStore
 import android.view.*
 import android.widget.*
 import androidx.core.app.NotificationCompat
@@ -37,45 +40,66 @@ class FloatingService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var audioVisualizer: Visualizer? = null
 
-    // Daftar lagu — otomatis dari res/raw
     private val tracks = mutableListOf<Track>()
 
-    data class Track(val title: String, val resId: Int)
+    data class Track(val title: String, val artist: String, val uri: Uri)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        loadTracksFromRaw()
         startForegroundNotification()
+        loadTracksFromStorage()
         setupFloatingView()
     }
 
-    /**
-     * Memuat lagu dari res/raw secara otomatis.
-     * Setiap file .mp3 di folder raw akan jadi lagu di playlist.
-     */
-    private fun loadTracksFromRaw() {
-        // Ambil semua resource di R.raw secara otomatis via reflection
-        val rawFields = R.raw::class.java.fields
-        for (field in rawFields) {
-            try {
-                val resId = field.getInt(null)
-                val name = field.name
-                    .replace("_", " ")
-                    .split(" ")
-                    .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
-                tracks.add(Track(name, resId))
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+    // ============== LOAD DARI STORAGE ==============
+
+    private fun loadTracksFromStorage() {
+        tracks.clear()
+
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
 
-        // Kalau kosong, kasih placeholder biar app tetap jalan
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.IS_MUSIC
+        )
+
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
+
+        try {
+            contentResolver.query(collection, projection, selection, null, sortOrder)?.use { c ->
+                val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+
+                while (c.moveToNext()) {
+                    val id = c.getLong(idCol)
+                    val title = c.getString(titleCol) ?: "Unknown"
+                    val artist = c.getString(artistCol) ?: "Unknown"
+                    val uri = ContentUris.withAppendedId(collection, id)
+                    tracks.add(Track(title, artist, uri))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         if (tracks.isEmpty()) {
-            tracks.add(Track("(Tidak ada lagu di res/raw)", 0))
+            Toast.makeText(this, "Tidak ada lagu di HP", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "${tracks.size} lagu ditemukan", Toast.LENGTH_SHORT).show()
         }
     }
+
+    // ============== NOTIFIKASI ==============
 
     private fun startForegroundNotification() {
         val channelId = "asic_channel"
@@ -97,6 +121,8 @@ class FloatingService : Service() {
 
         startForeground(1, notification)
     }
+
+    // ============== FLOATING VIEW ==============
 
     private fun setupFloatingView() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -129,7 +155,7 @@ class FloatingService : Service() {
         progressBar = floatingView.findViewById(R.id.progressBar)
         btnPlay = floatingView.findViewById(R.id.btnPlay)
 
-        // Bikin bar visualizer (20 bar)
+        // Bikin 20 bar visualizer
         for (i in 0 until 20) {
             val bar = View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(0, 5, 1f).apply { marginEnd = 2 }
@@ -139,41 +165,47 @@ class FloatingService : Service() {
         }
 
         buildPlaylist()
-        tvTitle.text = tracks[currentIndex].title
+        if (tracks.isNotEmpty()) {
+            tvTitle.text = "${tracks[currentIndex].title} - ${tracks[currentIndex].artist}"
+        } else {
+            tvTitle.text = "Tidak ada lagu"
+        }
 
-        // Tombol Play/Pause
+        // Play/Pause
         btnPlay.setOnClickListener {
-            if (tracks[currentIndex].resId == 0) {
+            if (tracks.isEmpty()) {
                 Toast.makeText(this, "Tidak ada lagu!", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             if (isPlaying) pauseMusic() else playMusic()
         }
 
-        // Tombol Close
+        // Close
         floatingView.findViewById<Button>(R.id.btnClose).setOnClickListener {
             stopSelf()
         }
 
-        // Tombol Next
+        // Next
         floatingView.findViewById<Button>(R.id.btnNext).setOnClickListener {
+            if (tracks.isEmpty()) return@setOnClickListener
             currentIndex = (currentIndex + 1) % tracks.size
             updateTrackAndPlay()
         }
 
-        // Tombol Prev
+        // Prev
         floatingView.findViewById<Button>(R.id.btnPrev).setOnClickListener {
+            if (tracks.isEmpty()) return@setOnClickListener
             currentIndex = (currentIndex - 1 + tracks.size) % tracks.size
             updateTrackAndPlay()
         }
 
-        // Tombol Toggle Playlist
+        // Toggle playlist
         floatingView.findViewById<Button>(R.id.btnTogglePlaylist).setOnClickListener {
             isPlaylistVisible = !isPlaylistVisible
             playlistContainer.visibility = if (isPlaylistVisible) View.VISIBLE else View.GONE
         }
 
-        // Progress bar bisa diklik untuk seek
+        // Seek progress bar
         progressBar.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_UP && mediaPlayer != null) {
                 val percent = event.x / progressBar.width
@@ -186,32 +218,37 @@ class FloatingService : Service() {
         setupDrag(params)
     }
 
-    // ================== MUSIC ==================
+    // ============== MUSIC ==============
 
     private fun playMusic() {
+        if (tracks.isEmpty()) return
         try {
             mediaPlayer?.release()
-            mediaPlayer = MediaPlayer.create(this, tracks[currentIndex].resId)?.apply {
+            val track = tracks[currentIndex]
+            mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build()
                 )
+                setDataSource(this@FloatingService, track.uri)
+                setOnPreparedListener {
+                    tvDuration.text = formatTime(it.duration)
+                    it.start()
+                    isPlaying = true
+                    btnPlay.text = "⏸"
+                    startVisualizer()
+                    startProgressUpdate()
+                }
                 setOnCompletionListener {
-                    // Auto next saat lagu habis
                     currentIndex = (currentIndex + 1) % tracks.size
                     updateTrackAndPlay()
                 }
-                start()
+                prepareAsync()
             }
-            isPlaying = true
-            btnPlay.text = "⏸"
-            tvDuration.text = formatTime(mediaPlayer?.duration ?: 0)
-            startVisualizer()
-            startProgressUpdate()
         } catch (e: Exception) {
-            Toast.makeText(this, "Gagal memutar: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -231,7 +268,9 @@ class FloatingService : Service() {
         stopProgressUpdate()
         isPlaying = false
         btnPlay.text = "▶"
-        tvTitle.text = tracks[currentIndex].title
+        if (tracks.isNotEmpty()) {
+            tvTitle.text = "${tracks[currentIndex].title} - ${tracks[currentIndex].artist}"
+        }
         tvCurrent.text = "0:00"
         tvDuration.text = "0:00"
         progressBar.progress = 0
@@ -246,7 +285,7 @@ class FloatingService : Service() {
         return "%d:%02d".format(min, sec)
     }
 
-    // ================== VISUALIZER ==================
+    // ============== VISUALIZER ==============
 
     private fun startVisualizer() {
         val mp = mediaPlayer ?: return
@@ -266,7 +305,6 @@ class FloatingService : Service() {
                 enabled = true
             }
         } catch (e: Exception) {
-            // Kalau gagal, fallback ke animasi random
             startRandomVisualizer()
         }
     }
@@ -280,9 +318,7 @@ class FloatingService : Service() {
                 var sum = 0
                 for (j in 0 until chunkSize) {
                     val idx = i * chunkSize + j
-                    if (idx < waveform.size) {
-                        sum += kotlin.math.abs(waveform[idx].toInt())
-                    }
+                    if (idx < waveform.size) sum += kotlin.math.abs(waveform[idx].toInt())
                 }
                 val avg = sum / chunkSize
                 val height = ((avg / 128f) * 80).toInt().coerceIn(5, 80)
@@ -322,7 +358,7 @@ class FloatingService : Service() {
         }
     }
 
-    // ================== PROGRESS ==================
+    // ============== PROGRESS ==============
 
     private fun startProgressUpdate() {
         progressJob = scope.launch {
@@ -346,13 +382,23 @@ class FloatingService : Service() {
         progressJob?.cancel()
     }
 
-    // ================== PLAYLIST ==================
+    // ============== PLAYLIST ==============
 
     private fun buildPlaylist() {
         playlistLayout.removeAllViews()
+        if (tracks.isEmpty()) {
+            val empty = TextView(this).apply {
+                text = "Tidak ada lagu di HP"
+                setTextColor(Color.GRAY)
+                textSize = 11f
+                setPadding(8, 8, 8, 8)
+            }
+            playlistLayout.addView(empty)
+            return
+        }
         tracks.forEachIndexed { index, track ->
             val item = TextView(this).apply {
-                text = "${index + 1}. ${track.title}"
+                text = "${index + 1}. ${track.title} - ${track.artist}"
                 setTextColor(if (index == currentIndex) Color.BLACK else 0xFF00FF00.toInt())
                 setBackgroundColor(if (index == currentIndex) 0xFF00FF00.toInt() else Color.TRANSPARENT)
                 textSize = 11f
@@ -367,7 +413,7 @@ class FloatingService : Service() {
         }
     }
 
-    // ================== DRAG ==================
+    // ============== DRAG ==============
 
     private fun setupDrag(params: WindowManager.LayoutParams) {
         var initialX = 0
