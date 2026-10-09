@@ -15,9 +15,8 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
-    private val OVERLAY_PERMISSION_CODE = 1001
-    private val STORAGE_PERMISSION_CODE = 1002
-    private val AUDIO_PERMISSION_CODE = 1003
+    private val OVERLAY_CODE = 1001
+    private val PERMISSION_CODE = 1002
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // Android 13+
             permissions.add(Manifest.permission.READ_MEDIA_AUDIO)
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // Android 6-12
             permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -56,21 +56,12 @@ class MainActivity : AppCompatActivity() {
             permissions.add(Manifest.permission.RECORD_AUDIO)
         }
 
-        // Izin notifikasi (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
         val toRequest = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (toRequest.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
-                this,
-                toRequest.toTypedArray(),
-                STORAGE_PERMISSION_CODE
-            )
+            ActivityCompat.requestPermissions(this, toRequest.toTypedArray(), PERMISSION_CODE)
         }
     }
 
@@ -86,14 +77,14 @@ class MainActivity : AppCompatActivity() {
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:$packageName")
                 ),
-                OVERLAY_PERMISSION_CODE
+                OVERLAY_CODE
             )
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == OVERLAY_PERMISSION_CODE && checkOverlayPermission()) {
+        if (requestCode == OVERLAY_CODE && checkOverlayPermission()) {
             startFloatingService()
         }
     }
