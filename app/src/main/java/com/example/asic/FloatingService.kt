@@ -225,28 +225,29 @@ class FloatingService : Service() {
         try {
             mediaPlayer?.release()
             val track = tracks[currentIndex]
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                setDataSource(this@FloatingService, track.uri)
-                setOnPreparedListener {
-                    tvDuration.text = formatTime(it.duration)
-                    it.start()
-                    isPlaying = true
-                    btnPlay.text = "⏸"
-                    startVisualizer()
-                    startProgressUpdate()
-                }
-                setOnCompletionListener {
-                    currentIndex = (currentIndex + 1) % tracks.size
-                    updateTrackAndPlay()
-                }
-                prepareAsync()
+            val mp = MediaPlayer()
+            mp.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            mp.setDataSource(this, track.uri)
+            mp.setOnPreparedListener { player ->
+                tvDuration.text = formatTime(player.duration)
+                player.start()
+                this@FloatingService.isPlaying = true
+                btnPlay.text = "⏸"
+                startVisualizer()
+                startProgressUpdate()
             }
+            mp.setOnCompletionListener {
+                this@FloatingService.currentIndex =
+                    (this@FloatingService.currentIndex + 1) % tracks.size
+                updateTrackAndPlay()
+            }
+            mp.prepareAsync()
+            mediaPlayer = mp
         } catch (e: Exception) {
             Toast.makeText(this, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
         }
