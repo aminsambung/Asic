@@ -322,7 +322,7 @@ class FloatingService : Service() {
                 }
                 val avg = sum / chunkSize
                 val height = ((avg / 128f) * 80).toInt().coerceIn(5, 80)
-                val lp = bar.layoutParams
+                var lp = bar.layoutParams
                 lp.height = height
                 bar.layoutParams = lp
             }
@@ -334,7 +334,7 @@ class FloatingService : Service() {
             while (isActive) {
                 for (i in 0 until visualizerLayout.childCount) {
                     val bar = visualizerLayout.getChildAt(i)
-                    val lp = bar.layoutParams
+                    var lp = bar.layoutParams
                     lp.height = (10..80).random()
                     bar.layoutParams = lp
                 }
@@ -352,7 +352,7 @@ class FloatingService : Service() {
         audioVisualizer = null
         for (i in 0 until visualizerLayout.childCount) {
             val bar = visualizerLayout.getChildAt(i)
-            val lp = bar.layoutParams
+            var lp = bar.layoutParams
             lp.height = 5
             bar.layoutParams = lp
         }
