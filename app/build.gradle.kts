@@ -1,29 +1,18 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-}
-android {
-    // ...
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
 }
 
 android {
-    namespace = "com.example.dynamicisland"
+    namespace = "com.example.asic"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.dynamicisland"
+        applicationId = "com.example.asic"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-    }
-
-    buildFeatures {
-        compose = true
     }
 
     compileOptions {
@@ -38,14 +27,7 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.compose.ui:ui:1.6.0")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.6.0")
-    implementation("androidx.compose.material3:material3:1.2.0")
-    implementation("androidx.compose.material:material-icons-extended:1.6.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    implementation("androidx.savedstate:savedstate-ktx:1.2.1")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    debugImplementation("androidx.compose.ui:ui-tooling:1.6.0")
 }
