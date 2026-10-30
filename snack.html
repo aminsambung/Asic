@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Snake Nokia Klasik</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #43523d;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .phone-container {
+            background-color: #9ead86;
+            border: 8px solid #333;
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .screen {
+            background-color: #8b9575;
+            border: 4px solid #43523d;
+            width: 240px;
+            height: 240px;
+            position: relative;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+        .header-info {
+            width: 240px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #273023;
+        }
+        .controls {
+            margin-top: 15px;
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 50px);
+            gap: 5px;
+            justify-content: center;
+        }
+        .btn {
+            background-color: #333;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px #111;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .btn:active {
+            background-color: #444;
+            box-shadow: 0 1px #111;
+            transform: translateY(3px);
+        }
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 3; }
+        .btn-start {
+            grid-column: 2; grid-row: 2;
+            background-color: #557a46;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="phone-container">
+        <div class="header-info">
+            <span>SCORE: <span id="score">0</span></span>
+            <span>HIGH: <span id="highscore">0</span></span>
+        </div>
+        <div class="screen">
+            <div class="scanlines"></div>
+            <canvas id="gameCanvas" width="240" height="240"></canvas>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-up" id="upBtn">▲</button>
+            <button class="btn btn-left" id="leftBtn">◀</button>
+            <button class="btn btn-start" id="startBtn">START</button>
+            <button class="btn btn-right" id="rightBtn">▶</button>
+            <button class="btn btn-down" id="downBtn">▼</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const highscoreEl = document.getElementById('highscore');
+
+        const gridSize = 12;
+        const tileCount = 20;
+        
+        let snake = [];
+        let food = {x: 5, y: 5};
+        let dx = 1;
+        let dy = 0;
+        let score = 0;
+        let highscore = localStorage.getItem('nokia_snake_high') || 0;
+        let gameInterval = null;
+        let isRunning = false;
+
+        highscoreEl.innerText = highscore;
+
+        function resetGame() {
+            snake = [
+                {x: 10, y: 10},
+                {x: 9, y: 10},
+                {x: 8, y: 10}
+            ];
+            dx = 1;
+            dy = 0;
+            score = 0;
+            scoreEl.innerText = score;
+            spawnFood();
+        }
+
+        function spawnFood() {
+            food.x = Math.floor(Math.random() * tileCount);
+            food.y = Math.floor(Math.random() * tileCount);
+            // Pastikan makanan tidak muncul di badan ular
+            snake.forEach(part => {
+                if (part.x === food.x && part.y === food.y) {
+                    spawnFood();
+                }
+            });
+        }
+
+        function main() {
+            if (isGameOver()) {
+                endGame();
+                return;
+            }
+            update();
+            draw();
+        }
+
+        function update() {
+            const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+            snake.unshift(head);
+
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreEl.innerText = score;
+                if (score > highscore) {
+                    highscore = score;
+                    highscoreEl.innerText = highscore;
+                    localStorage.setItem('nokia_snake_high', highscore);
+                }
+                spawnFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function draw() {
+            // Bersihkan layar
+            ctx.fillStyle = '#8b9575';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Gambar Ular
+            ctx.fillStyle = '#273023';
+            snake.forEach(part => {
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+
+            // Gambar Makanan
+            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
+        }
+
+        function isGameOver() {
+            const head = snake[0];
+            // Tabrak dinding
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                return true;
+            }
+            // Tabrak badan sendiri
+            for (let i = 1; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function startGame() {
+            if (isRunning) return;
+            resetGame();
+            isRunning = true;
+            document.getElementById('startBtn').innerText = 'PLAYING';
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(main, 120);
+        }
+
+        function endGame() {
+            clearInterval(gameInterval);
+            isRunning = false;
+            document.getElementById('startBtn').innerText = 'START';
+            ctx.fillStyle = 'rgba(39, 48, 35, 0.8)';
+            ctx.fillRect(30, 90, 180, 60);
+            ctx.fillStyle = '#9ead86';
+            ctx.font = 'bold 16px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', 120, 115);
+            ctx.font = '12px Courier New';
+            ctx.fillText('Tekan START', 120, 135);
+        }
+
+        // Kontrol Tombol
+        document.getElementById('upBtn').addEventListener('click', () => { if (dy === 0) { dx = 0; dy = -1; } });
+        document.getElementById('downBtn').addEventListener('click', () => { if (dy === 0) { dx = 0; dy = 1; } });
+        document.getElementById('leftBtn').addEventListener('click', () => { if (dx === 0) { dx = -1; dy = 0; } });
+        document.getElementById('rightBtn').addEventListener('click', () => { if (dx === 0) { dx = 1; dy = 0; } });
+        document.getElementById('startBtn').addEventListener('click', startGame);
+
+        // Tampilan awal
+        resetGame();
+        draw();
+        ctx.fillStyle = 'rgba(39, 48, 35, 0.8)';
+        ctx.fillRect(30, 90, 180, 60);
+        ctx.fillStyle = '#9ead86';
+        ctx.font = 'bold 16px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('SNAKE NOKIA', 120, 115);
+        ctx.font = '12px Courier New';
+        ctx.fillText('Tekan START', 120, 135);
+    </script>
+</body>
+</html>
